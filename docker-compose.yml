@@ -1,0 +1,27 @@
+version: "3.8"
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data          # Persist SQLite DB
+      - ./backend/.env:/app/.env  # GCP credentials
+    environment:
+      - DATABASE_PATH=/app/data/campus_monitor.db
+    restart: unless-stopped
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile.dashboard
+    ports:
+      - "8501:8501"
+    depends_on:
+      - backend
+    environment:
+      - API_BASE=http://backend:8000
+    restart: unless-stopped

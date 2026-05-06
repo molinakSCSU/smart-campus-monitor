@@ -1,13 +1,13 @@
 """
 Smart Campus Object Monitoring System
-FastAPI Backend — Main Application
+FastAPI Backend - Main Application
 
 Endpoints:
-  /devices          — CRUD for registered devices
-  /detections       — CRUD for object detection records
-  /images           — Upload, list, delete images (+ auto-detect)
-  /reports          — Aggregated analytics and summaries
-  /docs             — Auto-generated Swagger UI
+  /devices          - CRUD for registered devices
+  /detections       - CRUD for object detection records
+  /images           - Upload, list, delete images (+ auto-detect)
+  /reports          - Aggregated analytics and summaries
+  /docs             - Auto-generated Swagger UI
 """
 import logging
 
@@ -27,13 +27,13 @@ logging.basicConfig(
 app = FastAPI(
     title=settings.APP_NAME,
     description=(
-        "An AI-Powered Sensing, Detection, and Reporting Platform "
+        "A sensing, detection, and reporting platform "
         "for university campus environments."
     ),
     version="1.0.0",
 )
 
-# CORS — allow Streamlit dashboard and other clients
+# CORS - allow Streamlit dashboard and other clients
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,

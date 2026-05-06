@@ -1,43 +1,20 @@
 # Smart Campus Object Monitoring System
 
-An AI-Powered Sensing, Detection, and Reporting Platform for university campus environments.
+A sensing, detection, and reporting platform for university campus environments.
 
-**DSC 333 Final Project — Spring 2026**
+**DSC 333 Final Project - Spring 2026**
 
 ---
 
 ## Architecture
 
-```
-┌──────────────────┐
-│   Raspberry Pi   │
-│  (Camera Module) │
-└────────┬─────────┘
-         │  HTTP POST (image data)
-         ▼
-┌──────────────────────────┐
-│     FastAPI Backend       │
-│  - Receives images        │
-│  - Uploads to GCS         │
-│  - Calls Vision API       │
-│  - Writes to SQLite       │
-│  - Serves CRUD endpoints  │
-└────┬───────┬────────┬─────┘
-     │       │        │
-     ▼       ▼        ▼
- SQLite   Cloud     Cloud Vision
-  DB     Storage       API
-     │
-     ▼
-┌────────────────────┐
-│ Streamlit Dashboard │
-│  - Reads via API    │
-│  - Displays data    │
-│  - Filters/search   │
-└────────────────────┘
-```
+- Raspberry Pi camera captures images and sends them to the backend over HTTP.
+- The FastAPI backend stores metadata in SQLite, uploads files to Cloud Storage when configured, and calls Cloud Vision when credentials are available.
+- The Streamlit dashboard reads from the backend API and shows recent detections, filters, and summary charts.
 
 ## Quick Start
+
+Use Python 3.11 for local setup. That matches the Docker images in this repo and avoids package compatibility issues with newer Python releases.
 
 ### 1. Clone and set up
 
@@ -50,7 +27,7 @@ python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
-# Edit .env with your GCP credentials
+# Edit .env if you want to enable Google Cloud Storage and Vision locally
 
 # Seed with sample data (for local development)
 python seed.py
@@ -97,6 +74,8 @@ docker compose up --build
 
 ## GCP Setup
 
+Cloud services are optional for local development. If you skip this section, uploads still work with placeholder file URLs and detection is skipped.
+
 1. **Create a project** in [Google Cloud Console](https://console.cloud.google.com)
 
 2. **Enable APIs:**
@@ -127,7 +106,7 @@ docker compose up --build
 | Column | Type | Notes |
 |--------|------|-------|
 | image_id | INTEGER | PK, auto-increment |
-| device_id | INTEGER | FK → devices |
+| device_id | INTEGER | FK -> devices |
 | image_url | TEXT | GCS public URL |
 | file_name | TEXT | |
 | captured_at | TEXT | timestamp |
@@ -136,16 +115,16 @@ docker compose up --build
 | Column | Type | Notes |
 |--------|------|-------|
 | detection_id | INTEGER | PK, auto-increment |
-| image_id | INTEGER | FK → images |
-| device_id | INTEGER | FK → devices |
+| image_id | INTEGER | FK -> images |
+| device_id | INTEGER | FK -> devices |
 | object_label | TEXT | Vision API label |
-| confidence | REAL | 0.0 – 1.0 |
+| confidence | REAL | 0.0 - 1.0 |
 | detected_at | TEXT | timestamp |
 
 ### Relationships
-- **One device → many images** (device_id)
-- **One image → many detections** (image_id)
-- **Transitive: one device → many detections** (through images)
+- **One device -> many images** (`device_id`)
+- **One image -> many detections** (`image_id`)
+- **One device -> many detections** through images
 
 ## API Endpoints
 
@@ -185,34 +164,34 @@ docker compose up --build
 
 ## Project Structure
 
-```
+```text
 smart-campus-monitor/
-├── backend/
-│   ├── main.py              # FastAPI application
-│   ├── config.py            # Settings & env vars
-│   ├── database.py          # SQLite setup + schema
-│   ├── models.py            # Pydantic request/response models
-│   ├── seed.py              # Sample data generator
-│   ├── routers/
-│   │   ├── devices.py       # /devices CRUD
-│   │   ├── detections.py    # /detections CRUD
-│   │   ├── images.py        # /images upload/list/delete
-│   │   └── reports.py       # /reports analytics
-│   ├── services/
-│   │   ├── vision.py        # Google Cloud Vision API
-│   │   └── storage.py       # Google Cloud Storage
-│   ├── requirements.txt
-│   └── .env.example
-├── dashboard/
-│   ├── app.py               # Streamlit web dashboard
-│   └── requirements.txt
-├── raspberry_pi/
-│   ├── capture.py           # Pi camera capture script
-│   └── requirements.txt
-├── Dockerfile.backend
-├── Dockerfile.dashboard
-├── docker-compose.yml
-└── README.md
+|-- backend/
+|   |-- main.py
+|   |-- config.py
+|   |-- database.py
+|   |-- models.py
+|   |-- seed.py
+|   |-- routers/
+|   |   |-- devices.py
+|   |   |-- detections.py
+|   |   |-- images.py
+|   |   `-- reports.py
+|   |-- services/
+|   |   |-- vision.py
+|   |   `-- storage.py
+|   |-- requirements.txt
+|   `-- .env.example
+|-- dashboard/
+|   |-- app.py
+|   `-- requirements.txt
+|-- raspberry_pi/
+|   |-- capture.py
+|   `-- requirements.txt
+|-- Dockerfile.backend
+|-- Dockerfile.dashboard
+|-- docker-compose.yml
+`-- README.md
 ```
 
 ## Team Responsibilities

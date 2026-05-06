@@ -4,7 +4,7 @@ from typing import Optional
 from pydantic import BaseModel, Field
 
 
-# ── Device schemas ──────────────────────────────────────────────
+# Device schemas
 
 class DeviceCreate(BaseModel):
     device_name: str = Field(..., min_length=1, max_length=100)
@@ -25,7 +25,7 @@ class DeviceResponse(BaseModel):
     registered_at: str
 
 
-# ── Image schemas ───────────────────────────────────────────────
+# Image schemas
 
 class ImageResponse(BaseModel):
     image_id: int
@@ -35,7 +35,7 @@ class ImageResponse(BaseModel):
     captured_at: str
 
 
-# ── Detection schemas ───────────────────────────────────────────
+# Detection schemas
 
 class DetectionCreate(BaseModel):
     image_id: int
@@ -69,7 +69,7 @@ class DetectionDetail(BaseModel):
     image_url: str
 
 
-# ── Report schemas ──────────────────────────────────────────────
+# Report schemas
 
 class DetectionCountByDevice(BaseModel):
     device_name: str

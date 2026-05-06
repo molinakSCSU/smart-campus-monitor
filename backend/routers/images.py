@@ -1,8 +1,7 @@
 """Endpoints for image upload, listing, and deletion."""
-import io
 import logging
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from database import get_connection
 from models import ImageResponse
@@ -19,7 +18,7 @@ def _row_to_image(row) -> ImageResponse:
 
 @router.post("/upload", status_code=201, response_model=ImageResponse)
 def upload_and_detect(
-    device_id: int,
+    device_id: int = Form(..., description="Device ID for the uploaded image"),
     file: UploadFile = File(..., description="Image file to upload"),
 ):
     """

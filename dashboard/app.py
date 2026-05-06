@@ -1,27 +1,39 @@
 """
-Streamlit Dashboard — Smart Campus Object Monitoring System
+Streamlit Dashboard - Smart Campus Object Monitoring System
 
 Displays recent detections, device info, and analytics
 powered by the FastAPI backend.
 """
-import requests
-import streamlit as st
+import os
+
 import pandas as pd
 import plotly.express as px
-from datetime import datetime, timedelta
+import requests
+import streamlit as st
 
-# ── Config ──────────────────────────────────────────────────────
+# Config
 st.set_page_config(
     page_title="Smart Campus Monitor",
-    page_icon="📸",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-API_BASE = st.secrets.get("API_BASE", "http://localhost:8000")
+
+def get_api_base() -> str:
+    env_api_base = os.environ.get("API_BASE")
+    if env_api_base:
+        return env_api_base
+
+    try:
+        return st.secrets.get("API_BASE", "http://localhost:8000")
+    except Exception:
+        return "http://localhost:8000"
 
 
-# ── Helpers ─────────────────────────────────────────────────────
+API_BASE = get_api_base()
+
+
+# Helpers
 def api_get(path: str, params: dict = None) -> dict | list | None:
     """GET request to the FastAPI backend."""
     try:
@@ -37,7 +49,12 @@ def api_post(path: str, json_data: dict = None, files: dict = None) -> dict | No
     """POST request to the FastAPI backend."""
     try:
         if files:
-            resp = requests.post(f"{API_BASE}{path}", files=files, data={"device_id": json_data.get("device_id")}, timeout=30)
+            resp = requests.post(
+                f"{API_BASE}{path}",
+                files=files,
+                data={"device_id": json_data.get("device_id")},
+                timeout=30,
+            )
         else:
             resp = requests.post(f"{API_BASE}{path}", json=json_data, timeout=10)
         resp.raise_for_status()
@@ -55,8 +72,8 @@ def api_delete(path: str) -> bool:
         return False
 
 
-# ── Sidebar ─────────────────────────────────────────────────────
-st.sidebar.title("📸 Campus Monitor")
+# Sidebar
+st.sidebar.title("Campus Monitor")
 page = st.sidebar.radio(
     "Navigation",
     ["Dashboard", "Devices", "Upload Image"],
@@ -65,13 +82,13 @@ page = st.sidebar.radio(
 
 st.sidebar.markdown("---")
 
-# ── Pages ───────────────────────────────────────────────────────
+# Pages
 
 if page == "Dashboard":
     st.title("Dashboard")
     st.markdown("Real-time object detection overview from campus cameras.")
 
-    # ── Summary metrics ──
+    # Summary metrics
     col1, col2, col3, col4 = st.columns(4)
     summary = api_get("/reports/summary")
     if summary:
@@ -82,8 +99,8 @@ if page == "Dashboard":
 
     st.markdown("---")
 
-    # ── Filters ──
-    with st.expander("🔍 Filters", expanded=False):
+    # Filters
+    with st.expander("Filters", expanded=False):
         filter_cols = st.columns(4)
         with filter_cols[0]:
             # Fetch unique labels for dropdown
@@ -108,7 +125,7 @@ if page == "Dashboard":
     if selected_device != "All":
         params["device_id"] = int(selected_device.split(":")[0])
 
-    # ── Detection table ──
+    # Detection table
     st.subheader("Recent Detections")
     detections = api_get("/detections", params)
     if detections:
@@ -122,7 +139,7 @@ if page == "Dashboard":
 
     st.markdown("---")
 
-    # ── Charts ──
+    # Charts
     chart_cols = st.columns(2)
 
     with chart_cols[0]:
@@ -145,7 +162,7 @@ if page == "Dashboard":
         else:
             st.info("No object data available.")
 
-    # ── Device activity ──
+    # Device activity
     if summary and summary.get("by_device"):
         st.markdown("---")
         st.subheader("Activity by Device")
@@ -213,7 +230,7 @@ elif page == "Upload Image":
     uploaded = st.file_uploader("Choose an image", type=["jpg", "jpeg", "png", "webp"])
     if uploaded:
         st.image(uploaded, caption="Preview", width=400)
-        if st.button("🔍 Upload & Detect", type="primary"):
+        if st.button("Upload and Detect", type="primary"):
             with st.spinner("Uploading to cloud and running detection..."):
                 result = api_post(
                     "/images/upload",

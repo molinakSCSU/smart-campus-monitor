@@ -15,7 +15,7 @@ from datetime import datetime
 
 import requests
 
-# Camera library — use picamera2 on Raspberry Pi OS
+# Camera library - use picamera2 on Raspberry Pi OS
 # Falls back to a dummy capture for testing on non-Pi systems
 try:
     from picamera2 import Picamera2
@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 def capture_image():
     """Capture a single frame from the Pi camera."""
     if not HAS_CAMERA:
-        logger.warning("No camera detected — generating dummy image for testing")
+        logger.warning("No camera detected - generating dummy image for testing")
         # Create a tiny valid JPEG for testing the pipeline
         from PIL import Image
         buf = io.BytesIO()
@@ -67,13 +67,13 @@ def send_to_backend(image_bytes: bytes, backend_url: str, device_id: int) -> boo
         )
         if resp.ok:
             data = resp.json()
-            logger.info(f"✅ Image uploaded: ID={data['image_id']}")
+            logger.info(f"Image uploaded: id={data['image_id']}")
             return True
         else:
-            logger.error(f"❌ Upload failed ({resp.status_code}): {resp.text}")
+            logger.error(f"Upload failed ({resp.status_code}): {resp.text}")
             return False
     except requests.RequestException as e:
-        logger.error(f"❌ Connection error: {e}")
+        logger.error(f"Connection error: {e}")
         return False
 
 
@@ -84,9 +84,12 @@ def main():
     parser.add_argument("--interval", type=int, default=60, help="Capture interval in seconds (default: 60)")
     args = parser.parse_args()
 
-    logger.info(f"Starting capture — backend={args.backend}, device_id={args.device_id}, interval={args.interval}s")
+    logger.info(
+        f"Starting capture - backend={args.backend}, "
+        f"device_id={args.device_id}, interval={args.interval}s"
+    )
     if not HAS_CAMERA:
-        logger.warning("picamera2 not available — running in test mode (dummy images)")
+        logger.warning("picamera2 not available - running in test mode (dummy images)")
 
     while True:
         logger.info("Capturing image...")

@@ -196,13 +196,13 @@ smart-campus-monitor/
 
 ## Team Responsibilities
 
-### Team Member A
+### Kenny Molina
 - Raspberry Pi setup and camera configuration
 - Image capture script development
 - Cloud Storage upload integration
 - End-to-end pipeline testing
 
-### Team Member B
+### Michael Johnson
 - FastAPI backend development
 - Vision API integration and response parsing
 - SQLite database design and schema creation

@@ -1,7 +1,5 @@
 """Google Cloud Vision API integration."""
-import io
 import logging
-from typing import Optional
 
 from config import settings
 
@@ -25,8 +23,10 @@ def detect_objects(image_bytes: bytes) -> list[dict]:
     Returns list of dicts with keys: label, confidence.
     """
     if not settings.GOOGLE_CLOUD_PROJECT_ID:
-        logger.warning("GCP project not configured — skipping Vision API")
+        logger.warning("GCP project not configured - skipping Vision API")
         return []
+
+    from google.cloud import vision
 
     client = _get_client()
 

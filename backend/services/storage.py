@@ -32,7 +32,7 @@ def upload_image(
     Falls back to a local file path if GCP is not configured.
     """
     if not settings.GOOGLE_CLOUD_STORAGE_BUCKET:
-        logger.warning("GCP bucket not configured — returning local placeholder URL")
+        logger.warning("GCP bucket not configured - returning local placeholder URL")
         return f"file:///tmp/campus_monitor/{device_id}/{uuid.uuid4().hex[:12]}.{file_extension}"
 
     client = _get_client()

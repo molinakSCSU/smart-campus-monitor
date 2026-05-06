@@ -1,5 +1,5 @@
 """
-Seed script — creates sample devices and detections for local development.
+Seed script - creates sample devices and detections for local development.
 Run:  python seed.py
 """
 import random
@@ -35,7 +35,7 @@ def seed():
         )
         conn.commit()
         devices.append(cur.lastrowid)
-        print(f"  Created device: Camera-{i+1:02d} → {loc}")
+        print(f"  Created device: Camera-{i+1:02d} -> {loc}")
 
     # Create 200 images across devices
     now = datetime.now()
@@ -66,7 +66,7 @@ def seed():
     # Stats
     total_det = conn.execute("SELECT COUNT(*) FROM detections").fetchone()[0]
     total_img = conn.execute("SELECT COUNT(*) FROM images").fetchone()[0]
-    print(f"\n  ✅ Seeded {len(devices)} devices, {total_img} images, {total_det} detections")
+    print(f"\n  Seeded {len(devices)} devices, {total_img} images, {total_det} detections")
     conn.close()
 
 

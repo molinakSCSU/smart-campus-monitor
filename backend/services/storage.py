@@ -54,9 +54,16 @@ def upload_image(
     blob = bucket.blob(blob_name)
 
     blob.upload_from_string(image_bytes, content_type="image/jpeg")
-    blob.make_public()
-
     url = blob.public_url
+    try:
+        blob.make_public()
+    except Exception as exc:
+        logger.warning(
+            "Uploaded image to GCS but could not make it public. "
+            "This usually means uniform bucket-level access is enabled: %s",
+            exc,
+        )
+
     logger.info(f"Uploaded image to GCS: {url}")
     return url
 

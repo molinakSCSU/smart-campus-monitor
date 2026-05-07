@@ -2,6 +2,7 @@
 import logging
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Optional
 
 from config import settings
@@ -9,6 +10,7 @@ from config import settings
 logger = logging.getLogger(__name__)
 
 _client = None
+LOCAL_IMAGE_ROOT = Path("/tmp/campus_monitor")
 
 
 def _get_client():
@@ -32,8 +34,17 @@ def upload_image(
     Falls back to a local file path if GCP is not configured.
     """
     if not settings.GOOGLE_CLOUD_STORAGE_BUCKET:
-        logger.warning("GCP bucket not configured - returning local placeholder URL")
-        return f"file:///tmp/campus_monitor/{device_id}/{uuid.uuid4().hex[:12]}.{file_extension}"
+        date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        file_name = f"{uuid.uuid4().hex[:12]}.{file_extension}"
+        local_dir = LOCAL_IMAGE_ROOT / str(device_id) / date_str
+        local_dir.mkdir(parents=True, exist_ok=True)
+        local_path = local_dir / file_name
+        local_path.write_bytes(image_bytes)
+        logger.warning(
+            "GCP bucket not configured - saved image locally at %s",
+            local_path,
+        )
+        return local_path.resolve().as_uri()
 
     client = _get_client()
     bucket = client.bucket(settings.GOOGLE_CLOUD_STORAGE_BUCKET)
@@ -56,6 +67,12 @@ def delete_image(object_name: str) -> bool:
         return False
 
     try:
+        if object_name.startswith("file://"):
+            local_path = Path(object_name.removeprefix("file://"))
+            if local_path.exists():
+                local_path.unlink()
+            return True
+
         client = _get_client()
         bucket = client.bucket(settings.GOOGLE_CLOUD_STORAGE_BUCKET)
         blob = bucket.blob(object_name)
@@ -69,6 +86,9 @@ def delete_image(object_name: str) -> bool:
 
 def extract_object_name(image_url: str) -> Optional[str]:
     """Extract the GCS object name from a public URL."""
+    if image_url.startswith("file://"):
+        return image_url
+
     bucket_name = settings.GOOGLE_CLOUD_STORAGE_BUCKET
     prefix = f"https://storage.googleapis.com/{bucket_name}/"
     if image_url.startswith(prefix):

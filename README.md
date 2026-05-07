@@ -74,7 +74,7 @@ docker compose up --build
 
 ## GCP Setup
 
-Cloud services are optional for local development. If you skip this section, uploads still work with placeholder file URLs and detection is skipped.
+Cloud services are optional for local development. If you skip this section, uploads are stored locally on disk and detection is skipped.
 
 1. **Create a project** in [Google Cloud Console](https://console.cloud.google.com)
 

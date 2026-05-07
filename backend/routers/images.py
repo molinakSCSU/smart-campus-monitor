@@ -1,11 +1,19 @@
 """Endpoints for image upload, listing, and deletion."""
 import logging
+import mimetypes
+from pathlib import Path
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi.responses import FileResponse, Response
 
 from database import get_connection
 from models import ImageResponse
-from services.storage import delete_image as gcs_delete, extract_object_name, upload_image
+from services.storage import (
+    delete_image as gcs_delete,
+    extract_object_name,
+    read_image_bytes,
+    upload_image,
+)
 from services.vision import detect_objects
 
 logger = logging.getLogger(__name__)
@@ -14,6 +22,11 @@ router = APIRouter(prefix="/images", tags=["Images"])
 
 def _row_to_image(row) -> ImageResponse:
     return ImageResponse(**dict(row))
+
+
+def _guess_media_type(file_name: str | None, image_url: str) -> str:
+    media_type, _ = mimetypes.guess_type(file_name or image_url)
+    return media_type or "image/jpeg"
 
 
 @router.post("/upload", status_code=201, response_model=ImageResponse)
@@ -113,6 +126,38 @@ def get_image(image_id: int):
         if not row:
             raise HTTPException(status_code=404, detail="Image not found")
         return _row_to_image(row)
+    finally:
+        conn.close()
+
+
+@router.get("/{image_id}/content", include_in_schema=False)
+def get_image_content(image_id: int):
+    """Serve image content for dashboard previews."""
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            "SELECT image_url, file_name FROM images WHERE image_id = ?", (image_id,)
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Image not found")
+
+        image_url = row["image_url"]
+        file_name = row["file_name"]
+        media_type = _guess_media_type(file_name, image_url)
+
+        if image_url.startswith("file://"):
+            local_path = Path(image_url.removeprefix("file://"))
+            if not local_path.exists():
+                raise HTTPException(status_code=404, detail="Image file not found")
+            return FileResponse(local_path, media_type=media_type, filename=file_name)
+
+        try:
+            image_bytes = read_image_bytes(image_url)
+        except Exception as exc:
+            logger.error("Failed to load image content for %s: %s", image_id, exc)
+            raise HTTPException(status_code=404, detail="Image content unavailable") from exc
+
+        return Response(content=image_bytes, media_type=media_type)
     finally:
         conn.close()
 

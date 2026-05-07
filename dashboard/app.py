@@ -5,11 +5,12 @@ Displays recent detections, device info, and analytics
 powered by the FastAPI backend.
 """
 import os
+from datetime import datetime
 
-import pandas as pd
 import plotly.express as px
 import requests
 import streamlit as st
+import streamlit.components.v1 as components
 
 # Config
 st.set_page_config(
@@ -34,6 +35,47 @@ API_BASE = get_api_base()
 
 
 # Helpers
+def format_timestamp(value: str) -> str:
+    """Format API timestamps for display."""
+    try:
+        return datetime.fromisoformat(value).strftime("%Y-%m-%d %H:%M")
+    except ValueError:
+        return value
+
+
+def format_detection_rows(detections: list[dict]) -> list[dict]:
+    """Format detection rows for Streamlit tables without pandas."""
+    rows = []
+    for item in detections:
+        rows.append(
+            {
+                "object_label": item["object_label"],
+                "confidence": f"{item['confidence']:.1%}",
+                "detected_at": format_timestamp(item["detected_at"]),
+                "device_name": item["device_name"],
+                "location": item["location"],
+            }
+        )
+    return rows
+
+
+def format_device_rows(devices: list[dict]) -> list[dict]:
+    """Format device rows for Streamlit tables without pandas."""
+    rows = []
+    for item in devices:
+        row = dict(item)
+        row["registered_at"] = format_timestamp(item["registered_at"])
+        rows.append(row)
+    return rows
+
+
+def format_object_summary(detection: dict | None) -> str:
+    """Return a compact label summary for the latest detection."""
+    if not detection:
+        return "No detections yet"
+    return f"{detection['object_label']} ({detection['confidence']:.0%})"
+
+
 def api_get(path: str, params: dict = None) -> dict | list | None:
     """GET request to the FastAPI backend."""
     try:
@@ -88,6 +130,71 @@ if page == "Dashboard":
     st.title("Dashboard")
     st.markdown("Real-time object detection overview from campus cameras.")
 
+    control_col1, control_col2 = st.columns([1, 2])
+    with control_col1:
+        if st.button("Refresh Now", use_container_width=True):
+            st.rerun()
+    with control_col2:
+        auto_refresh = st.checkbox("Auto-refresh every 30 seconds", value=True)
+        if auto_refresh:
+            components.html(
+                """
+                <script>
+                setTimeout(function() {
+                    window.parent.location.reload();
+                }, 30000);
+                </script>
+                """,
+                height=0,
+            )
+
+    latest_images = api_get("/images", {"limit": 1}) or []
+    latest_detections = api_get("/detections", {"limit": 1}) or []
+    latest_image = latest_images[0] if latest_images else None
+    latest_detection = latest_detections[0] if latest_detections else None
+
+    spotlight_col, preview_col = st.columns([1.1, 0.9])
+    with spotlight_col:
+        st.subheader("Live Snapshot")
+        snap_col1, snap_col2, snap_col3 = st.columns(3)
+        snap_col1.metric(
+            "Last Capture Time",
+            format_timestamp(latest_image["captured_at"]) if latest_image else "No captures yet",
+        )
+        snap_col2.metric(
+            "Last Detected Object",
+            format_object_summary(latest_detection),
+        )
+        snap_col3.metric(
+            "Preview Source",
+            latest_detection["device_name"] if latest_detection else (
+                f"Device {latest_image['device_id']}" if latest_image else "Waiting for data"
+            ),
+        )
+        if latest_detection:
+            st.caption(
+                f"Latest detection came from {latest_detection['device_name']}"
+                f" at {format_timestamp(latest_detection['detected_at'])}."
+            )
+        else:
+            st.info(
+                "No detections have been recorded yet. Keep the Pi capture loop running "
+                "or upload an image from the Upload Image tab."
+            )
+
+    with preview_col:
+        st.subheader("Latest Image")
+        if latest_image:
+            st.image(
+                f"{API_BASE}/images/{latest_image['image_id']}/content",
+                caption=f"Image {latest_image['image_id']} · {format_timestamp(latest_image['captured_at'])}",
+                use_column_width=True,
+            )
+        else:
+            st.info(
+                "No images have been uploaded yet. Once the Pi sends a capture, the latest frame will appear here."
+            )
+
     # Summary metrics
     col1, col2, col3, col4 = st.columns(4)
     summary = api_get("/reports/summary")
@@ -129,13 +236,16 @@ if page == "Dashboard":
     st.subheader("Recent Detections")
     detections = api_get("/detections", params)
     if detections:
-        df = pd.DataFrame(detections)
-        df["detected_at"] = pd.to_datetime(df["detected_at"]).dt.strftime("%Y-%m-%d %H:%M")
-        df["confidence"] = df["confidence"].apply(lambda x: f"{x:.1%}")
-        df_display = df[["object_label", "confidence", "detected_at", "device_name", "location"]]
-        st.dataframe(df_display, use_container_width=True, hide_index=True)
+        st.dataframe(
+            format_detection_rows(detections),
+            use_container_width=True,
+            hide_index=True,
+        )
     else:
-        st.info("No detections found matching the current filters.")
+        st.info(
+            "No detections match these filters yet. Try widening the time range, lowering the confidence threshold, "
+            "or waiting for the next camera upload."
+        )
 
     st.markdown("---")
 
@@ -146,39 +256,46 @@ if page == "Dashboard":
         st.subheader("Detections Over Time")
         time_data = api_get("/reports/detections-over-time", {"hours": time_options[selected_time]})
         if time_data and len(time_data) > 0:
-            tdf = pd.DataFrame(time_data)
-            fig = px.bar(tdf, x="hour", y="count", labels={"hour": "Hour", "count": "Detections"})
+            fig = px.bar(
+                x=[item["hour"] for item in time_data],
+                y=[item["count"] for item in time_data],
+                labels={"x": "Hour", "y": "Detections"},
+            )
             fig.update_xaxes(tickangle=45)
             st.plotly_chart(fig, use_container_width=True)
         else:
-            st.info("No time-series data available.")
+            st.info("No detection timeline yet. New uploads will start filling this chart automatically.")
 
     with chart_cols[1]:
         st.subheader("Top Detected Objects")
         if top_objects and len(top_objects) > 0:
-            odf = pd.DataFrame(top_objects)
-            fig = px.pie(odf, values="count", names="object_label", hole=0.4)
+            fig = px.pie(
+                values=[item["count"] for item in top_objects],
+                names=[item["object_label"] for item in top_objects],
+                hole=0.4,
+            )
             st.plotly_chart(fig, use_container_width=True)
         else:
-            st.info("No object data available.")
+            st.info("No detected labels yet. Once Vision returns results, the most common objects will appear here.")
 
     # Device activity
     if summary and summary.get("by_device"):
         st.markdown("---")
         st.subheader("Activity by Device")
-        ddf = pd.DataFrame(summary["by_device"])
-        st.dataframe(ddf, use_container_width=True, hide_index=True)
+        st.dataframe(summary["by_device"], use_container_width=True, hide_index=True)
+    else:
+        st.markdown("---")
+        st.subheader("Activity by Device")
+        st.info("No device activity has been recorded yet. Active devices will appear here after their first upload.")
 
 elif page == "Devices":
     st.title("Device Management")
 
     devices = api_get("/devices")
     if devices:
-        df = pd.DataFrame(devices)
-        df["registered_at"] = pd.to_datetime(df["registered_at"]).dt.strftime("%Y-%m-%d %H:%M")
-        st.dataframe(df, use_container_width=True, hide_index=True)
+        st.dataframe(format_device_rows(devices), use_container_width=True, hide_index=True)
     else:
-        st.info("No devices registered yet.")
+        st.info("No devices are registered yet. Add your Raspberry Pi camera here before trying uploads.")
 
     st.markdown("---")
 
@@ -220,7 +337,7 @@ elif page == "Upload Image":
 
     devices = api_get("/devices")
     if not devices:
-        st.warning("No devices registered. Please register a device first.")
+        st.warning("No devices are registered yet. Go to the Devices tab first, then come back here to upload.")
         st.stop()
 
     dev_opts = {f"{d['device_id']}: {d['device_name']} ({d['location'] or 'No location'})": d["device_id"] for d in devices}
@@ -240,3 +357,5 @@ elif page == "Upload Image":
             if result:
                 st.success(f"Image uploaded (ID: {result['image_id']})")
                 st.json(result)
+    else:
+        st.info("Choose a device and image file to test the upload flow manually.")

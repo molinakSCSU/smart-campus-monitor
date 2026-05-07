@@ -68,6 +68,22 @@ def upload_image(
     return url
 
 
+def read_image_bytes(image_url: str) -> bytes:
+    """Read image bytes from either local fallback storage or GCS."""
+    if image_url.startswith("file://"):
+        local_path = Path(image_url.removeprefix("file://"))
+        return local_path.read_bytes()
+
+    object_name = extract_object_name(image_url)
+    if not object_name:
+        raise ValueError("Unsupported image URL")
+
+    client = _get_client()
+    bucket = client.bucket(settings.GOOGLE_CLOUD_STORAGE_BUCKET)
+    blob = bucket.blob(object_name)
+    return blob.download_as_bytes()
+
+
 def delete_image(object_name: str) -> bool:
     """Delete an image from Cloud Storage. Returns True if deleted."""
     if not settings.GOOGLE_CLOUD_STORAGE_BUCKET:

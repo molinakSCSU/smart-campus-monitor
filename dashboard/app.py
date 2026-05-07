@@ -10,6 +10,7 @@ from datetime import datetime
 import plotly.express as px
 import requests
 import streamlit as st
+import streamlit.components.v1 as components
 
 # Config
 st.set_page_config(
@@ -68,6 +69,13 @@ def format_device_rows(devices: list[dict]) -> list[dict]:
     return rows
 
 
+def format_object_summary(detection: dict | None) -> str:
+    """Return a compact label summary for the latest detection."""
+    if not detection:
+        return "No detections yet"
+    return f"{detection['object_label']} ({detection['confidence']:.0%})"
+
+
 def api_get(path: str, params: dict = None) -> dict | list | None:
     """GET request to the FastAPI backend."""
     try:
@@ -122,6 +130,71 @@ if page == "Dashboard":
     st.title("Dashboard")
     st.markdown("Real-time object detection overview from campus cameras.")
 
+    control_col1, control_col2 = st.columns([1, 2])
+    with control_col1:
+        if st.button("Refresh Now", use_container_width=True):
+            st.rerun()
+    with control_col2:
+        auto_refresh = st.checkbox("Auto-refresh every 30 seconds", value=True)
+        if auto_refresh:
+            components.html(
+                """
+                <script>
+                setTimeout(function() {
+                    window.parent.location.reload();
+                }, 30000);
+                </script>
+                """,
+                height=0,
+            )
+
+    latest_images = api_get("/images", {"limit": 1}) or []
+    latest_detections = api_get("/detections", {"limit": 1}) or []
+    latest_image = latest_images[0] if latest_images else None
+    latest_detection = latest_detections[0] if latest_detections else None
+
+    spotlight_col, preview_col = st.columns([1.1, 0.9])
+    with spotlight_col:
+        st.subheader("Live Snapshot")
+        snap_col1, snap_col2, snap_col3 = st.columns(3)
+        snap_col1.metric(
+            "Last Capture Time",
+            format_timestamp(latest_image["captured_at"]) if latest_image else "No captures yet",
+        )
+        snap_col2.metric(
+            "Last Detected Object",
+            format_object_summary(latest_detection),
+        )
+        snap_col3.metric(
+            "Preview Source",
+            latest_detection["device_name"] if latest_detection else (
+                f"Device {latest_image['device_id']}" if latest_image else "Waiting for data"
+            ),
+        )
+        if latest_detection:
+            st.caption(
+                f"Latest detection came from {latest_detection['device_name']}"
+                f" at {format_timestamp(latest_detection['detected_at'])}."
+            )
+        else:
+            st.info(
+                "No detections have been recorded yet. Keep the Pi capture loop running "
+                "or upload an image from the Upload Image tab."
+            )
+
+    with preview_col:
+        st.subheader("Latest Image")
+        if latest_image:
+            st.image(
+                f"{API_BASE}/images/{latest_image['image_id']}/content",
+                caption=f"Image {latest_image['image_id']} · {format_timestamp(latest_image['captured_at'])}",
+                use_column_width=True,
+            )
+        else:
+            st.info(
+                "No images have been uploaded yet. Once the Pi sends a capture, the latest frame will appear here."
+            )
+
     # Summary metrics
     col1, col2, col3, col4 = st.columns(4)
     summary = api_get("/reports/summary")
@@ -169,7 +242,10 @@ if page == "Dashboard":
             hide_index=True,
         )
     else:
-        st.info("No detections found matching the current filters.")
+        st.info(
+            "No detections match these filters yet. Try widening the time range, lowering the confidence threshold, "
+            "or waiting for the next camera upload."
+        )
 
     st.markdown("---")
 
@@ -188,7 +264,7 @@ if page == "Dashboard":
             fig.update_xaxes(tickangle=45)
             st.plotly_chart(fig, use_container_width=True)
         else:
-            st.info("No time-series data available.")
+            st.info("No detection timeline yet. New uploads will start filling this chart automatically.")
 
     with chart_cols[1]:
         st.subheader("Top Detected Objects")
@@ -200,13 +276,17 @@ if page == "Dashboard":
             )
             st.plotly_chart(fig, use_container_width=True)
         else:
-            st.info("No object data available.")
+            st.info("No detected labels yet. Once Vision returns results, the most common objects will appear here.")
 
     # Device activity
     if summary and summary.get("by_device"):
         st.markdown("---")
         st.subheader("Activity by Device")
         st.dataframe(summary["by_device"], use_container_width=True, hide_index=True)
+    else:
+        st.markdown("---")
+        st.subheader("Activity by Device")
+        st.info("No device activity has been recorded yet. Active devices will appear here after their first upload.")
 
 elif page == "Devices":
     st.title("Device Management")
@@ -215,7 +295,7 @@ elif page == "Devices":
     if devices:
         st.dataframe(format_device_rows(devices), use_container_width=True, hide_index=True)
     else:
-        st.info("No devices registered yet.")
+        st.info("No devices are registered yet. Add your Raspberry Pi camera here before trying uploads.")
 
     st.markdown("---")
 
@@ -257,7 +337,7 @@ elif page == "Upload Image":
 
     devices = api_get("/devices")
     if not devices:
-        st.warning("No devices registered. Please register a device first.")
+        st.warning("No devices are registered yet. Go to the Devices tab first, then come back here to upload.")
         st.stop()
 
     dev_opts = {f"{d['device_id']}: {d['device_name']} ({d['location'] or 'No location'})": d["device_id"] for d in devices}
@@ -277,3 +357,5 @@ elif page == "Upload Image":
             if result:
                 st.success(f"Image uploaded (ID: {result['image_id']})")
                 st.json(result)
+    else:
+        st.info("Choose a device and image file to test the upload flow manually.")

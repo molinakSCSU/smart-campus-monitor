@@ -12,6 +12,7 @@ import io
 import logging
 import time
 from datetime import datetime
+from typing import Optional
 
 import requests
 
@@ -40,16 +41,52 @@ def capture_image():
         Image.new("RGB", (640, 480), color=(100, 150, 200)).save(buf, format="JPEG")
         return buf.getvalue()
 
-    camera = Picamera2()
-    camera.start()
-    # Let the camera warm up
-    time.sleep(2)
-    array = camera.capture_array("main")
-    camera.stop()
-
     from PIL import Image
+    raise RuntimeError("capture_image requires an initialized camera on Raspberry Pi")
+
+
+def init_camera() -> Optional["Picamera2"]:
+    """Create and start one camera session for the lifetime of the script."""
+    if not HAS_CAMERA:
+        return None
+
+    camera = Picamera2()
+    config = camera.create_still_configuration(
+        main={"format": "RGB888"},
+        buffer_count=2,
+    )
+    camera.configure(config)
+    camera.start()
+    # Let the sensor and auto-controls settle before the first capture.
+    time.sleep(2)
+    logger.info("Camera initialized.")
+    return camera
+
+
+def close_camera(camera: Optional["Picamera2"]) -> None:
+    """Stop and close the camera cleanly."""
+    if camera is None:
+        return
+
+    try:
+        camera.stop()
+    except Exception:
+        logger.debug("Camera stop raised during cleanup.", exc_info=True)
+
+    try:
+        camera.close()
+    except Exception:
+        logger.debug("Camera close raised during cleanup.", exc_info=True)
+
+
+def capture_image_from_camera(camera: "Picamera2") -> bytes:
+    """Capture one frame from an already-running camera and return JPEG bytes."""
+    from PIL import Image
+
+    array = camera.capture_array("main")
+    image = Image.fromarray(array).convert("RGB")
     buf = io.BytesIO()
-    Image.fromarray(array).save(buf, format="JPEG")
+    image.save(buf, format="JPEG")
     return buf.getvalue()
 
 
@@ -88,19 +125,33 @@ def main():
         f"Starting capture - backend={args.backend}, "
         f"device_id={args.device_id}, interval={args.interval}s"
     )
+    camera = None
+
     if not HAS_CAMERA:
         logger.warning("picamera2 not available - running in test mode (dummy images)")
+    else:
+        camera = init_camera()
 
-    while True:
-        logger.info("Capturing image...")
-        try:
-            image_bytes = capture_image()
-            send_to_backend(image_bytes, args.backend, args.device_id)
-        except Exception as e:
-            logger.error(f"Capture error: {e}")
+    try:
+        while True:
+            logger.info("Capturing image...")
+            try:
+                if HAS_CAMERA:
+                    image_bytes = capture_image_from_camera(camera)
+                else:
+                    image_bytes = capture_image()
+                send_to_backend(image_bytes, args.backend, args.device_id)
+            except Exception as e:
+                logger.error(f"Capture error: {e}")
+                if HAS_CAMERA:
+                    logger.info("Resetting camera before the next capture attempt...")
+                    close_camera(camera)
+                    camera = init_camera()
 
-        logger.info(f"Next capture in {args.interval}s...")
-        time.sleep(args.interval)
+            logger.info(f"Next capture in {args.interval}s...")
+            time.sleep(args.interval)
+    finally:
+        close_camera(camera)
 
 
 if __name__ == "__main__":

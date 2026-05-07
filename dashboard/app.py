@@ -5,8 +5,8 @@ Displays recent detections, device info, and analytics
 powered by the FastAPI backend.
 """
 import os
+from datetime import datetime
 
-import pandas as pd
 import plotly.express as px
 import requests
 import streamlit as st
@@ -34,6 +34,40 @@ API_BASE = get_api_base()
 
 
 # Helpers
+def format_timestamp(value: str) -> str:
+    """Format API timestamps for display."""
+    try:
+        return datetime.fromisoformat(value).strftime("%Y-%m-%d %H:%M")
+    except ValueError:
+        return value
+
+
+def format_detection_rows(detections: list[dict]) -> list[dict]:
+    """Format detection rows for Streamlit tables without pandas."""
+    rows = []
+    for item in detections:
+        rows.append(
+            {
+                "object_label": item["object_label"],
+                "confidence": f"{item['confidence']:.1%}",
+                "detected_at": format_timestamp(item["detected_at"]),
+                "device_name": item["device_name"],
+                "location": item["location"],
+            }
+        )
+    return rows
+
+
+def format_device_rows(devices: list[dict]) -> list[dict]:
+    """Format device rows for Streamlit tables without pandas."""
+    rows = []
+    for item in devices:
+        row = dict(item)
+        row["registered_at"] = format_timestamp(item["registered_at"])
+        rows.append(row)
+    return rows
+
+
 def api_get(path: str, params: dict = None) -> dict | list | None:
     """GET request to the FastAPI backend."""
     try:
@@ -129,11 +163,11 @@ if page == "Dashboard":
     st.subheader("Recent Detections")
     detections = api_get("/detections", params)
     if detections:
-        df = pd.DataFrame(detections)
-        df["detected_at"] = pd.to_datetime(df["detected_at"]).dt.strftime("%Y-%m-%d %H:%M")
-        df["confidence"] = df["confidence"].apply(lambda x: f"{x:.1%}")
-        df_display = df[["object_label", "confidence", "detected_at", "device_name", "location"]]
-        st.dataframe(df_display, use_container_width=True, hide_index=True)
+        st.dataframe(
+            format_detection_rows(detections),
+            use_container_width=True,
+            hide_index=True,
+        )
     else:
         st.info("No detections found matching the current filters.")
 
@@ -146,8 +180,11 @@ if page == "Dashboard":
         st.subheader("Detections Over Time")
         time_data = api_get("/reports/detections-over-time", {"hours": time_options[selected_time]})
         if time_data and len(time_data) > 0:
-            tdf = pd.DataFrame(time_data)
-            fig = px.bar(tdf, x="hour", y="count", labels={"hour": "Hour", "count": "Detections"})
+            fig = px.bar(
+                x=[item["hour"] for item in time_data],
+                y=[item["count"] for item in time_data],
+                labels={"x": "Hour", "y": "Detections"},
+            )
             fig.update_xaxes(tickangle=45)
             st.plotly_chart(fig, use_container_width=True)
         else:
@@ -156,8 +193,11 @@ if page == "Dashboard":
     with chart_cols[1]:
         st.subheader("Top Detected Objects")
         if top_objects and len(top_objects) > 0:
-            odf = pd.DataFrame(top_objects)
-            fig = px.pie(odf, values="count", names="object_label", hole=0.4)
+            fig = px.pie(
+                values=[item["count"] for item in top_objects],
+                names=[item["object_label"] for item in top_objects],
+                hole=0.4,
+            )
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("No object data available.")
@@ -166,17 +206,14 @@ if page == "Dashboard":
     if summary and summary.get("by_device"):
         st.markdown("---")
         st.subheader("Activity by Device")
-        ddf = pd.DataFrame(summary["by_device"])
-        st.dataframe(ddf, use_container_width=True, hide_index=True)
+        st.dataframe(summary["by_device"], use_container_width=True, hide_index=True)
 
 elif page == "Devices":
     st.title("Device Management")
 
     devices = api_get("/devices")
     if devices:
-        df = pd.DataFrame(devices)
-        df["registered_at"] = pd.to_datetime(df["registered_at"]).dt.strftime("%Y-%m-%d %H:%M")
-        st.dataframe(df, use_container_width=True, hide_index=True)
+        st.dataframe(format_device_rows(devices), use_container_width=True, hide_index=True)
     else:
         st.info("No devices registered yet.")
 
